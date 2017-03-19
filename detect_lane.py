@@ -3,6 +3,7 @@ import cv2
 import glob
 import matplotlib.pyplot as plt
 import pickle
+import argparse
 
 
 def getObjectAndImagePoints():
@@ -60,7 +61,6 @@ def prepareCamera(objpoints, imgpoints):
     # Do camera calibration given object points and image points
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, img_size,None,None)
 
-
     dst = cv2.undistort(img, mtx, dist, None, mtx)
     cv2.imwrite('output_images/calibration_undist.jpg',dst)
 
@@ -70,15 +70,34 @@ def prepareCamera(objpoints, imgpoints):
     dist_pickle["dist"] = dist
     pickle.dump(dist_pickle, open( "output_images/dist_pickle.p", "wb" ))
     #dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
+
     # Visualize undistortion
+    visualizeUndistortedImages(img, dst)
+
+def visualizeUndistortedImages(originalImg, undistortedImg):
+    """
+    Show original image along with the undistorted version.
+    :originalImg: The original image with camera distortion.
+    :undistortedImg: The undistorted version of the original image.
+    """
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
-    ax1.imshow(img)
+    ax1.imshow(originalImg)
     ax1.set_title('Original Image', fontsize=30)
-    ax2.imshow(dst)
+    ax2.imshow(undistortedImg)
     ax2.set_title('Undistorted Image', fontsize=30)
 
+
+def defineFlags():
+    parser = argparse.ArgumentParser(description='Detects lane lines.')
+    parser.add_argument('--force-calibration', action='store_true')
+    return parser.parse_args()
+
 def main():
-    objpoints, imgpoints = getObjectAndImagePoints()
-    prepareCamera(objpoints, imgpoints)
+    args = defineFlags()
+    if (args.force_calibration):
+        objpoints, imgpoints = getObjectAndImagePoints()
+        prepareCamera(objpoints, imgpoints)
+    else:
+        print('Did not force calibration')
 
 main()
