@@ -2,9 +2,13 @@ import numpy as np
 import cv2
 import glob
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import pickle
 import argparse
+import os.path
 
+
+CONST_CAMERA_CALIB_PICKLE_FILE_PATH = 'output_images/dist_pickle.p'
 
 def getObjectAndImagePoints():
     """
@@ -42,7 +46,6 @@ def getObjectAndImagePoints():
             cv2.waitKey(500)
 
     cv2.destroyAllWindows()
-
     return objpoints, imgpoints
 
 
@@ -68,23 +71,72 @@ def prepareCamera(objpoints, imgpoints):
     dist_pickle = {}
     dist_pickle["mtx"] = mtx
     dist_pickle["dist"] = dist
-    pickle.dump(dist_pickle, open( "output_images/dist_pickle.p", "wb" ))
+    pickle.dump(dist_pickle, open(CONST_CAMERA_CALIB_PICKLE_FILE_PATH, "wb" ))
     #dst = cv2.cvtColor(dst, cv2.COLOR_BGR2RGB)
 
     # Visualize undistortion
-    visualizeUndistortedImages(img, dst)
+    visualizeImages(img, dst)
 
-def visualizeUndistortedImages(originalImg, undistortedImg):
+def undistortImage(img):
     """
-    Show original image along with the undistorted version.
-    :originalImg: The original image with camera distortion.
-    :undistortedImg: The undistorted version of the original image.
+    Undistorts an image. Loads camera calibration params from pickle file
+    :img: image to undistort
+    returns undistorted image
+    """
+    dist_pickle = pickle.load(open(CONST_CAMERA_CALIB_PICKLE_FILE_PATH, "r"))
+    mtx =  dist_pickle['mtx']
+    dist = dist_pickle['dist']
+    undist_img = cv2.undistort(img, mtx, dist, None, mtx)
+    return undist_img
+
+
+def absSobelThresh(img, orient='x', thresh_min=0, thresh_max=255):
+    """
+    Define a function that applies Sobel x or y,
+    then takes an absolute value and applies a threshold.
+    Note: calling your function with orient='x', thresh_min=5, thresh_max=100
+    should produce output like the example image shown above this quiz.
+    :img: the image to apply sobel to. The image must be in the RGB color space.
+    :orient: in which direction apply sobe.
+    :thresh_min: minimum threshold to generate the binary image.
+    :thresh_max: maximum threshold to generate the binary image.
+    """
+    # Apply the following steps to img
+    # 1) Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # 2) Take the derivative in x or y given orient = 'x' or 'y'
+    orientX, orientY = (1, 0) if orient == 'x' else (0, 1)
+    sobel = cv2.Sobel(gray, cv2.CV_64F, orientX, orientY)
+    # 3) Take the absolute value of the derivative or gradient
+    abs_sobel = np.absolute(sobel)
+    # 4) Scale to 8-bit (0 - 255) then convert to type = np.uint8
+    scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
+    # 5) Create a mask of 1's where the scaled gradient magnitude
+    # is > thresh_min and < thresh_max
+    sxbinary = np.zeros_like(scaled_sobel)
+    sxbinary[(scaled_sobel > thresh_min) & (scaled_sobel < thresh_max)] = 1
+    # 6) Return this mask as your binary_output image
+    binary_output = sxbinary
+    return binary_output
+
+
+def visualizeImages(original_img, modified_img, is_modified_img_gray=False):
+    """
+    Show original image along with the modified version.
+    :original_img: The original image with camera distortion.
+    :modified_img: The undistorted version of the original image.
     """
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(20,10))
-    ax1.imshow(originalImg)
+    f.tight_layout()
+    ax1.imshow(original_img)
     ax1.set_title('Original Image', fontsize=30)
-    ax2.imshow(undistortedImg)
-    ax2.set_title('Undistorted Image', fontsize=30)
+    if (is_modified_img_gray):
+        ax2.imshow(modified_img, cmap="gray")
+    else:
+        ax2.imshow(modified_img)
+    ax2.set_title('Modified Image', fontsize=30)
+    plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
+    plt.show()
 
 
 def defineFlags():
@@ -92,12 +144,14 @@ def defineFlags():
     parser.add_argument('--force-calibration', action='store_true')
     return parser.parse_args()
 
+
 def main():
     args = defineFlags()
-    if (args.force_calibration):
+    if (args.force_calibration or not os.path.isfile(CONST_CAMERA_CALIB_PICKLE_FILE_PATH)):
         objpoints, imgpoints = getObjectAndImagePoints()
         prepareCamera(objpoints, imgpoints)
-    else:
-        print('Did not force calibration')
+    image = mpimg.imread('test_images/test1.jpg')
+    grad_binary = absSobelThresh(image, orient="y", thresh_min=20, thresh_max=100)
+    visualizeImages(image, grad_binary, True)
 
 main()
