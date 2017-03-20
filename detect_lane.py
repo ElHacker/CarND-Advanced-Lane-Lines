@@ -191,16 +191,15 @@ def warpImage(img):
         [img_size[0] * 5 / 6 + 60, img_size[1]],
         [img_size[0] / 2 + 65, img_size[1] / 2 + 100]])
     dst = np.float32([
-        [img_size[0] / 4, 0],
+        [img_size[0] / 4 - 30, 0],
         [img_size[0] / 4, img_size[1]],
         [img_size[0] * 3 / 4, img_size[1]],
         [img_size[0] * 3 / 4, 0]])
 
-    img_size = (img.shape[1], img.shape[0])
     M = cv2.getPerspectiveTransform(src, dst)
     warped_img = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_NEAREST)
 
-    return warped_img
+    return warped_img, src, dst
 
 
 def visualizeImages(original_img, modified_img, modified_title='Modified Image', is_modified_img_gray=False):
@@ -250,7 +249,8 @@ def main():
     visualizeImages(image, combined_grad_binary_x_with_hls_binary, 'Sobel X gradient with S channel', True)
 
     # Warp the image.
-    warped_image = warpImage(combined_grad_binary_x_with_hls_binary)
+    # warped_image = warpImage(combined_grad_binary_x_with_hls_binary)
+    warped_image, src_points, dst_points = warpImage(image)
     visualizeImages(image, warped_image, 'Warped image', True)
 
 main()
