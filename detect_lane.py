@@ -436,7 +436,7 @@ def getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds):
     return ploty, leftx, lefty, rightx, righty
 
 
-def drawLane(image, binary_warped, left_fit, right_fit, Minv):
+def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center):
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
 
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
@@ -459,6 +459,9 @@ def drawLane(image, binary_warped, left_fit, right_fit, Minv):
     # Combine the result with the original image
     result = cv2.addWeighted(image, 1, newwarp, 0.3, 0)
     plt.imshow(result)
+    plt.text(100, 100, "Left lane radius of curvature: %(left_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
+    plt.text(100, 150, "Right lane radius of curvature: %(right_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
+    plt.text(100, 200, "Vehicle is %(dist_from_center).2f meters of center" % locals(), color=[1, 1, 1], fontsize=20)
     plt.show()
 
 def main():
@@ -489,6 +492,6 @@ def main():
     left_lane_inds, right_lane_inds, left_fit, right_fit = slideWindowsFitPolynomial(warped_image)
     left_lane_inds, right_lane_inds, left_fit, right_fit = fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
     left_curvature, right_curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_lane_inds, right_lane_inds)
-    drawLane(image, warped_image, left_fit, right_fit, Minv)
+    drawLane(image, warped_image, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center)
 
 main()
