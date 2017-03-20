@@ -83,7 +83,7 @@ def undistortImage(img):
     :img: image to undistort
     returns undistorted image
     """
-    dist_pickle = pickle.load(open(CONST_CAMERA_CALIB_PICKLE_FILE_PATH, "r"))
+    dist_pickle = pickle.load(open(CONST_CAMERA_CALIB_PICKLE_FILE_PATH, "rb"))
     mtx =  dist_pickle['mtx']
     dist = dist_pickle['dist']
     undist_img = cv2.undistort(img, mtx, dist, None, mtx)
@@ -153,7 +153,57 @@ def dirSobleThresh(img, sobel_kernel=3, thresh_limits=(0, np.pi/2)):
     return binary_output
 
 
-def visualizeImages(original_img, modified_img, is_modified_img_gray=False):
+def combineSobel(grad_binary_x, grad_binary_y, mag_binary, dir_binary):
+    combined = np.zeros_like(dir_binary)
+    combined[((grad_binary_x == 1) & (grad_binary_y == 1)) | ((mag_binary == 1) & (dir_binary == 1))] = 1
+    return combined
+
+
+def hls_select(img, thresh_limits=(0, 255)):
+    """
+    Define a function that thresholds the S-channel of HLS
+    Use exclusive lower bound (>) and inclusive upper (<=)
+    """
+    # 1) Convert to HLS color space
+    hls = cv2.cvtColor(img, cv2.COLOR_RGB2HLS)
+    # 2) Apply a threshold to the S channel
+    S = hls[:,:,2]
+    binary_output = np.zeros_like(S)
+    binary_output[(S > thresh_limits[0]) & (S <= thresh_limits[1])] = 1
+    # 3) Return a binary image of threshold result
+    return binary_output
+
+
+def warpImage(img):
+    """
+    Compute and apply perpective transform.
+    :img:  the image to warp
+    """
+    img_size = (img.shape[1], img.shape[0])
+    # Points order:
+    # left_upper
+    # left_lower
+    # right_upper
+    # right_lower
+    src = np.float32([
+        [img_size[0] / 2 - 65, img_size[1] / 2 + 100],
+        [img_size[0] / 6 - 10, img_size[1]],
+        [img_size[0] * 5 / 6 + 60, img_size[1]],
+        [img_size[0] / 2 + 65, img_size[1] / 2 + 100]])
+    dst = np.float32([
+        [img_size[0] / 4, 0],
+        [img_size[0] / 4, img_size[1]],
+        [img_size[0] * 3 / 4, img_size[1]],
+        [img_size[0] * 3 / 4, 0]])
+
+    img_size = (img.shape[1], img.shape[0])
+    M = cv2.getPerspectiveTransform(src, dst)
+    warped_img = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_NEAREST)
+
+    return warped_img
+
+
+def visualizeImages(original_img, modified_img, modified_title='Modified Image', is_modified_img_gray=False):
     """
     Show original image along with the modified version.
     :original_img: The original image with camera distortion.
@@ -167,7 +217,7 @@ def visualizeImages(original_img, modified_img, is_modified_img_gray=False):
         ax2.imshow(modified_img, cmap="gray")
     else:
         ax2.imshow(modified_img)
-    ax2.set_title('Modified Image', fontsize=30)
+    ax2.set_title(modified_title, fontsize=30)
     plt.subplots_adjust(left=0., right=1, top=0.9, bottom=0.)
     plt.show()
 
@@ -183,12 +233,24 @@ def main():
     if (args.force_calibration or not os.path.isfile(CONST_CAMERA_CALIB_PICKLE_FILE_PATH)):
         objpoints, imgpoints = getObjectAndImagePoints()
         prepareCamera(objpoints, imgpoints)
-    image = mpimg.imread('test_images/test1.jpg')
-    grad_binary = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
-    visualizeImages(image, grad_binary, True)
+    # image = undistortImage(mpimg.imread('test_images/straight_lines1.jpg'))
+    image = mpimg.imread('test_images/straight_lines1.jpg')
+    grad_binary_x = absSobelThresh(image, orient="x", thresh_limits=(20, 100))
+    grad_binary_y = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
     mag_binary = magSobelThresh(image, thresh_limits=(30, 100))
-    visualizeImages(image, mag_binary, True)
     dir_binary = dirSobleThresh(image, sobel_kernel=15, thresh_limits=(0.7, 1.3))
-    visualizeImages(image, dir_binary, True)
+    combined = combineSobel(grad_binary_x, grad_binary_y, mag_binary, dir_binary)
+    # visualizeImages(image, combined, 'Combined', True)
+    hls_binary = hls_select(image, thresh_limits=(170, 255))
+    # visualizeImages(image, hls_binary, 'S channel', True)
+
+    # Combine the Sobel on X with the HLS thresholded in S channel.
+    combined_grad_binary_x_with_hls_binary = np.zeros_like(grad_binary_x)
+    combined_grad_binary_x_with_hls_binary[(grad_binary_x == 1) | (hls_binary == 1)] = 1
+    visualizeImages(image, combined_grad_binary_x_with_hls_binary, 'Sobel X gradient with S channel', True)
+
+    # Warp the image.
+    warped_image = warpImage(combined_grad_binary_x_with_hls_binary)
+    visualizeImages(image, warped_image, 'Warped image', True)
 
 main()
