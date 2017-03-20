@@ -197,9 +197,10 @@ def warpImage(img):
         [img_size[0] * 3 / 4, 0]])
 
     M = cv2.getPerspectiveTransform(src, dst)
-    warped_img = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_NEAREST)
+    Minv = cv2.getPerspectiveTransform(dst, src)
+    warped_img = cv2.warpPerspective(img, M, img_size, flags=cv2.INTER_LINEAR)
 
-    return warped_img, src, dst
+    return warped_img, src, dst, M, Minv
 
 
 def visualizeImages(original_img, modified_img, modified_title='Modified Image', is_modified_img_gray=False):
@@ -393,13 +394,27 @@ def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_i
 
     return left_lane_inds, right_lane_inds, left_fit, right_fit
 
-def calculateRadiusOfCurvatureInWorldSpace(binary_warped, left_lane_inds, right_lane_inds, left_fit, right_fit):
-    # ploty = np.linspace(0, 719, num=720)# to cover same y-range as image
-    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+def calculateRadiusOfCurvatureInWorldSpace(binary_warped, left_lane_inds, right_lane_inds):
+
+    ploty, leftx, lefty, rightx, righty = getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds)
+
     # Define conversions in x and y from pixels space to meters
     # lane is about 30 meters long and 3.7 meters wide.
     ym_per_pix = 30/720 # meters per pixel in y dimension
     xm_per_pix = 3.7/700 # meters per pixel in x dimension
+
+    # Fit new polynomials to x,y in world space
+    left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
+    right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
+    # Calculate the new radius of curvature
+    left_curverad = ((1 + (2*left_fit_cr[0]*np.max(lefty)*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+    right_curverad = ((1 + (2*right_fit_cr[0]*np.max(righty)*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+    # Now our radius of curvature is in meters
+    print(left_curverad, 'm', right_curverad, 'm')
+
+
+def getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds):
+    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
 
     # Identify the x and y positions of all nonzero pixels in the image
     nonzero = binary_warped.nonzero()
@@ -411,16 +426,33 @@ def calculateRadiusOfCurvatureInWorldSpace(binary_warped, left_lane_inds, right_
     rightx = nonzerox[right_lane_inds]
     righty = nonzeroy[right_lane_inds]
 
+    return ploty, leftx, lefty, rightx, righty
 
-    # Fit new polynomials to x,y in world space
-    left_fit_cr = np.polyfit(lefty*ym_per_pix, leftx*xm_per_pix, 2)
-    right_fit_cr = np.polyfit(righty*ym_per_pix, rightx*xm_per_pix, 2)
-    # Calculate the new radius of curvature
-    left_curverad = ((1 + (2*left_fit_cr[0]*np.max(lefty)*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
-    right_curverad = ((1 + (2*right_fit_cr[0]*np.max(righty)*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
-    # Now our radius of curvature is in meters
-    print(left_curverad, 'm', right_curverad, 'm')
 
+def drawLane(image, binary_warped, left_fit, right_fit, Minv):
+    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+
+    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
+    # Create an image to draw the lines on
+    warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
+    color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+
+    # Recast the x and y points into usable format for cv2.fillPoly()
+    pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+    pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+    pts = np.hstack((pts_left, pts_right))
+
+    # Draw the lane onto the warped blank image
+    cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
+
+    # Warp the blank back to original image space using inverse perspective matrix (Minv)
+    newwarp = cv2.warpPerspective(color_warp, Minv, (image.shape[1], image.shape[0]))
+    # Combine the result with the original image
+    result = cv2.addWeighted(image, 1, newwarp, 0.3, 0)
+    plt.imshow(result)
+    plt.show()
 
 def main():
     args = defineFlags()
@@ -444,11 +476,12 @@ def main():
     # visualizeImages(image, combined_grad_binary_x_with_hls_binary, 'Sobel X gradient with S channel', True)
 
     # Warp the image.
-    warped_image, src_points, dst_points = warpImage(combined_grad_binary_x_with_hls_binary)
+    warped_image, src_points, dst_points, M, Minv = warpImage(combined_grad_binary_x_with_hls_binary)
     # image = drawLines(image, src_points)
-    visualizeImages(image, warped_image, 'Warped image', True)
+    # visualizeImages(image, warped_image, 'Warped image', True)
     left_lane_inds, right_lane_inds, left_fit, right_fit = slideWindowsFitPolynomial(warped_image)
-    fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
-    calculateRadiusOfCurvatureInWorldSpace(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
+    left_lane_inds, right_lane_inds, left_fit, right_fit = fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
+    calculateRadiusOfCurvatureInWorldSpace(warped_image, left_lane_inds, right_lane_inds)
+    drawLane(image, warped_image, left_fit, right_fit, Minv)
 
 main()
