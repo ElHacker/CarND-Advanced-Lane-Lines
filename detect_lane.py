@@ -394,9 +394,9 @@ def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_i
 
     return left_lane_inds, right_lane_inds, left_fit, right_fit
 
-def calculateRadiusOfCurvatureInWorldSpace(binary_warped, left_lane_inds, right_lane_inds):
+def calculateRadiusOfCurvatureAndCenterInWorldSpace(image, binary_warped, left_lane_inds, right_lane_inds):
 
-    ploty, leftx, lefty, rightx, righty = getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds)
+    _, leftx, lefty, rightx, righty = getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds)
 
     # Define conversions in x and y from pixels space to meters
     # lane is about 30 meters long and 3.7 meters wide.
@@ -409,8 +409,15 @@ def calculateRadiusOfCurvatureInWorldSpace(binary_warped, left_lane_inds, right_
     # Calculate the new radius of curvature
     left_curverad = ((1 + (2*left_fit_cr[0]*np.max(lefty)*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
     right_curverad = ((1 + (2*right_fit_cr[0]*np.max(righty)*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+    # Calculate distance from center
+    center_of_lane = ((rightx[-1] - leftx[-1]) / 2 + leftx[-1]) * xm_per_pix
+    center_of_image = (image.shape[1] / 2) * xm_per_pix
+    dist_from_center = center_of_image - center_of_lane
     # Now our radius of curvature is in meters
-    print(left_curverad, 'm', right_curverad, 'm')
+    print(left_curverad, 'm', right_curverad, 'm', dist_from_center, 'm')
+
+
+    return left_curverad, right_curverad, dist_from_center
 
 
 def getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds):
@@ -481,7 +488,7 @@ def main():
     # visualizeImages(image, warped_image, 'Warped image', True)
     left_lane_inds, right_lane_inds, left_fit, right_fit = slideWindowsFitPolynomial(warped_image)
     left_lane_inds, right_lane_inds, left_fit, right_fit = fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
-    calculateRadiusOfCurvatureInWorldSpace(warped_image, left_lane_inds, right_lane_inds)
+    left_curvature, right_curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_lane_inds, right_lane_inds)
     drawLane(image, warped_image, left_fit, right_fit, Minv)
 
 main()
