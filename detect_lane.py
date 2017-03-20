@@ -90,16 +90,13 @@ def undistortImage(img):
     return undist_img
 
 
-def absSobelThresh(img, orient='x', thresh_min=0, thresh_max=255):
+def absSobelThresh(img, orient='x', thresh_min=0, thresh_max=255, thresh_limits=(0, 255)):
     """
     Define a function that applies Sobel x or y,
     then takes an absolute value and applies a threshold.
-    Note: calling your function with orient='x', thresh_min=5, thresh_max=100
-    should produce output like the example image shown above this quiz.
     :img: the image to apply sobel to. The image must be in the RGB color space.
     :orient: in which direction apply sobe.
-    :thresh_min: minimum threshold to generate the binary image.
-    :thresh_max: maximum threshold to generate the binary image.
+    :thresh_limits: min and max thresholds to generate the binary image.
     """
     # Apply the following steps to img
     # 1) Convert to grayscale
@@ -114,9 +111,45 @@ def absSobelThresh(img, orient='x', thresh_min=0, thresh_max=255):
     # 5) Create a mask of 1's where the scaled gradient magnitude
     # is > thresh_min and < thresh_max
     sxbinary = np.zeros_like(scaled_sobel)
-    sxbinary[(scaled_sobel > thresh_min) & (scaled_sobel < thresh_max)] = 1
+    sxbinary[(scaled_sobel > thresh_limits[0]) & (scaled_sobel < thresh_limits[1])] = 1
     # 6) Return this mask as your binary_output image
     binary_output = sxbinary
+    return binary_output
+
+def magSobelThresh(img, sobel_kernel=3, thresh_limits=(0, 255)):
+    # Apply the following steps to img
+    # 1) Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # 2) Take the gradient in x and y separately
+    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    # 3) Calculate the magnitude
+    grad_magnitude = np.sqrt(sobelx**2 + sobely**2)
+    # 4) Scale to 8-bit (0 - 255) and convert to type = np.uint8
+    scaled_sobel = np.uint8(255*grad_magnitude/np.max(grad_magnitude))
+    # 5) Create a binary mask where mag thresholds are met
+    binary_output = np.zeros_like(scaled_sobel)
+    binary_output[(scaled_sobel >= thresh_limits[0]) & (scaled_sobel <= thresh_limits[1])] = 1
+    # 6) Return this mask as your binary_output image
+    return binary_output
+
+
+def dirSobleThresh(img, sobel_kernel=3, thresh_limits=(0, np.pi/2)):
+    # Apply the following steps to img
+    # 1) Convert to grayscale
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    # 2) Take the gradient in x and y separately
+    sobelx = cv2.Sobel(gray, cv2.CV_64F, 1, 0, ksize=sobel_kernel)
+    sobely = cv2.Sobel(gray, cv2.CV_64F, 0, 1, ksize=sobel_kernel)
+    # 3) Take the absolute value of the x and y gradients
+    abs_sobelx = np.absolute(sobelx)
+    abs_sobely = np.absolute(sobely)
+    # 4) Use np.arctan2(abs_sobely, abs_sobelx) to calculate the direction of the gradient
+    dir_sobel = np.arctan2(abs_sobely, abs_sobelx)
+    # 5) Create a binary mask where direction thresh_limitsolds are met
+    binary_output = np.zeros_like(dir_sobel)
+    binary_output[(dir_sobel >= thresh_limits[0]) & (dir_sobel <= thresh_limits[1])] = 1
+    # 6) Return this mask as your binary_output image
     return binary_output
 
 
@@ -151,7 +184,11 @@ def main():
         objpoints, imgpoints = getObjectAndImagePoints()
         prepareCamera(objpoints, imgpoints)
     image = mpimg.imread('test_images/test1.jpg')
-    grad_binary = absSobelThresh(image, orient="y", thresh_min=20, thresh_max=100)
+    grad_binary = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
     visualizeImages(image, grad_binary, True)
+    mag_binary = magSobelThresh(image, thresh_limits=(30, 100))
+    visualizeImages(image, mag_binary, True)
+    dir_binary = dirSobleThresh(image, sobel_kernel=15, thresh_limits=(0.7, 1.3))
+    visualizeImages(image, dir_binary, True)
 
 main()
