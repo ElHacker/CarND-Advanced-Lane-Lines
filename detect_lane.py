@@ -7,6 +7,7 @@ import pickle
 import argparse
 import os.path
 from moviepy.editor import VideoFileClip
+from line import Line
 
 
 CONST_CAMERA_CALIB_PICKLE_FILE_PATH = 'output_images/dist_pickle.p'
@@ -340,7 +341,7 @@ def slideWindowsFitPolynomial(binary_warped, plot=False):
 
     return left_lane_inds, right_lane_inds, left_fit, right_fit
 
-def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_inds, left_fit, right_fit, plot=False):
+def fitPolynomialAroundLinePositions(binary_warped, left_line, right_line, plot=False):
     """
     Fits a polynomial function based on previously calculated line positions on the method
     slideWindowsFitPolynomial.
@@ -349,6 +350,8 @@ def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_i
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
     margin = 100
+    left_fit = left_line.current_fit
+    right_fit = right_line.current_fit
     left_lane_inds = ((nonzerox > (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] - margin))
             & (nonzerox < (left_fit[0]*(nonzeroy**2) + left_fit[1]*nonzeroy + left_fit[2] + margin)))
     right_lane_inds = ((nonzerox > (right_fit[0]*(nonzeroy**2) + right_fit[1]*nonzeroy + right_fit[2] - margin))
@@ -477,6 +480,10 @@ def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, ri
 
     return result
 
+# Global vars to represent the detected lines in the lane.
+left_line = Line()
+right_line = Line()
+
 def process_image(image, plot=False):
     grad_binary_x = absSobelThresh(image, orient="x", thresh_limits=(20, 100))
     grad_binary_y = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
@@ -496,10 +503,16 @@ def process_image(image, plot=False):
     warped_image, src_points, dst_points, M, Minv = warpImage(combined_grad_binary_x_with_hls_binary)
     # image = drawLines(image, src_points)
     # visualizeImages(image, warped_image, 'Warped image', True)
-    left_lane_inds, right_lane_inds, left_fit, right_fit = slideWindowsFitPolynomial(warped_image)
-    left_lane_inds, right_lane_inds, left_fit, right_fit = fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
-    left_curvature, right_curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_lane_inds, right_lane_inds)
-    return drawLane(image, warped_image, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center, plot)
+    if (left_line.detected and right_line.detected):
+        # Calculate from previously calculated lines
+        left_line.lane_inds, right_line.lane_inds, left_line.current_fit, right_line.current_fit = fitPolynomialAroundLinePositions(warped_image, left_line, right_line)
+    else:
+        # Calculate from scratch.
+        left_line.lane_inds, right_line.lane_inds, left_line.current_fit, right_line.current_fit = slideWindowsFitPolynomial(warped_image)
+        left_line.detected = True
+        right_line.detected = True
+    left_line.curvature, right_line.curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_line.lane_inds, right_line.lane_inds)
+    return drawLane(image, warped_image, left_line.current_fit, right_line.current_fit, Minv, left_line.curvature, right_line.curvature, dist_from_center, plot)
 
 
 def main():
