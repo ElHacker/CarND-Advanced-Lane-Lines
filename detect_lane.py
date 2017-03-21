@@ -419,8 +419,7 @@ def calculateRadiusOfCurvatureAndCenterInWorldSpace(image, binary_warped, left_l
     center_of_image = (image.shape[1] / 2) * xm_per_pix
     dist_from_center = center_of_image - center_of_lane
     # Now our radius of curvature is in meters
-    print(left_curverad, 'm', right_curverad, 'm', dist_from_center, 'm')
-
+    # print(left_curverad, 'm', right_curverad, 'm', dist_from_center, 'm')
 
     return left_curverad, right_curverad, dist_from_center
 
@@ -463,11 +462,17 @@ def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, ri
     newwarp = cv2.warpPerspective(color_warp, Minv, (image.shape[1], image.shape[0]))
     # Combine the result with the original image
     result = cv2.addWeighted(image, 1, newwarp, 0.3, 0)
+    # Draw text on image
+    font = cv2.FONT_HERSHEY_COMPLEX
+    font_scale = 1
+    text_color = (255, 255, 255)
+    thickness = 2
+    result = cv2.putText(result, "Left lane radius of curvature: %(left_curvature).2f meters" % locals(), (100, 100), font, font_scale, text_color, thickness)
+    result = cv2.putText(result, "Right lane radius of curvature: %(right_curvature).2f meters" % locals(), (100, 150), font, font_scale, text_color, thickness)
+    result = cv2.putText(result, "Vehicle is %(dist_from_center).2f meters of center" % locals(), (100, 200), font, font_scale, text_color, thickness)
+
     if (plot):
         plt.imshow(result)
-        plt.text(100, 100, "Left lane radius of curvature: %(left_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
-        plt.text(100, 150, "Right lane radius of curvature: %(right_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
-        plt.text(100, 200, "Vehicle is %(dist_from_center).2f meters of center" % locals(), color=[1, 1, 1], fontsize=20)
         plt.show()
 
     return result
