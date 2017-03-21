@@ -6,6 +6,7 @@ import matplotlib.image as mpimg
 import pickle
 import argparse
 import os.path
+from moviepy.editor import VideoFileClip
 
 
 CONST_CAMERA_CALIB_PICKLE_FILE_PATH = 'output_images/dist_pickle.p'
@@ -225,6 +226,7 @@ def visualizeImages(original_img, modified_img, modified_title='Modified Image',
 def defineFlags():
     parser = argparse.ArgumentParser(description='Detects lane lines.')
     parser.add_argument('--force-calibration', action='store_true')
+    parser.add_argument('--video', action='store_true')
     return parser.parse_args()
 
 
@@ -238,16 +240,17 @@ def drawLines(image, points, color=[255, 0, 0], thickness=4):
     return image
 
 
-def generateHistogram(binary_img):
+def generateHistogram(binary_img, plot=False):
     """
     Take a histogram of the bottom half of a binary image
     """
     histogram = np.sum(binary_img[binary_img.shape[0]/2:,:], axis=0)
-    plt.plot(histogram)
-    plt.show()
+    if (plot):
+        plt.plot(histogram)
+        plt.show()
     return histogram
 
-def slideWindowsFitPolynomial(binary_warped):
+def slideWindowsFitPolynomial(binary_warped, plot=False):
     """
     Finds lane pixels by Histogram and sliding window.
     Video: https://www.youtube.com/watch?v=siAMDK8C_x8
@@ -321,22 +324,23 @@ def slideWindowsFitPolynomial(binary_warped):
 
     ### VISUALIZE
     # Generate x and y values for plotting
-    ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
-    left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
-    right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+    if (plot):
+        ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
+        left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+        right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
 
-    out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-    out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-    plt.imshow(out_img)
-    plt.plot(left_fitx, ploty, color='yellow')
-    plt.plot(right_fitx, ploty, color='yellow')
-    plt.xlim(0, 1280)
-    plt.ylim(720, 0)
-    plt.show()
+        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
+        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+        plt.imshow(out_img)
+        plt.plot(left_fitx, ploty, color='yellow')
+        plt.plot(right_fitx, ploty, color='yellow')
+        plt.xlim(0, 1280)
+        plt.ylim(720, 0)
+        plt.show()
 
     return left_lane_inds, right_lane_inds, left_fit, right_fit
 
-def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_inds, left_fit, right_fit):
+def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_inds, left_fit, right_fit, plot=False):
     """
     Fits a polynomial function based on previously calculated line positions on the method
     slideWindowsFitPolynomial.
@@ -365,32 +369,33 @@ def fitPolynomialAroundLinePositions(binary_warped, left_line_inds, right_lane_i
 
 
     ### VISUALIZE
-    # Create an image to draw on and an image to show the selection window
-    out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
-    window_img = np.zeros_like(out_img)
-    # Color in left and right line pixels
-    out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
-    out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
+    if (plot):
+        # Create an image to draw on and an image to show the selection window
+        out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+        window_img = np.zeros_like(out_img)
+        # Color in left and right line pixels
+        out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
+        out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
 
-    # Generate a polygon to illustrate the search window area
-    # And recast the x and y points into usable format for cv2.fillPoly()
-    left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
-    left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
-    left_line_pts = np.hstack((left_line_window1, left_line_window2))
-    right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
-    right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
-    right_line_pts = np.hstack((right_line_window1, right_line_window2))
+        # Generate a polygon to illustrate the search window area
+        # And recast the x and y points into usable format for cv2.fillPoly()
+        left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
+        left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
+        left_line_pts = np.hstack((left_line_window1, left_line_window2))
+        right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
+        right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
+        right_line_pts = np.hstack((right_line_window1, right_line_window2))
 
-    # Draw the lane onto the warped blank image
-    cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
-    cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
-    result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
-    plt.imshow(result)
-    plt.plot(left_fitx, ploty, color='yellow')
-    plt.plot(right_fitx, ploty, color='yellow')
-    plt.xlim(0, 1280)
-    plt.ylim(720, 0)
-    plt.show()
+        # Draw the lane onto the warped blank image
+        cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
+        cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
+        result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+        plt.imshow(result)
+        plt.plot(left_fitx, ploty, color='yellow')
+        plt.plot(right_fitx, ploty, color='yellow')
+        plt.xlim(0, 1280)
+        plt.ylim(720, 0)
+        plt.show()
 
     return left_lane_inds, right_lane_inds, left_fit, right_fit
 
@@ -436,7 +441,7 @@ def getNonzeroPositions(binary_warped, left_lane_inds, right_lane_inds):
     return ploty, leftx, lefty, rightx, righty
 
 
-def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center):
+def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center, plot=False):
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0] )
 
     left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
@@ -458,19 +463,16 @@ def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, ri
     newwarp = cv2.warpPerspective(color_warp, Minv, (image.shape[1], image.shape[0]))
     # Combine the result with the original image
     result = cv2.addWeighted(image, 1, newwarp, 0.3, 0)
-    plt.imshow(result)
-    plt.text(100, 100, "Left lane radius of curvature: %(left_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
-    plt.text(100, 150, "Right lane radius of curvature: %(right_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
-    plt.text(100, 200, "Vehicle is %(dist_from_center).2f meters of center" % locals(), color=[1, 1, 1], fontsize=20)
-    plt.show()
+    if (plot):
+        plt.imshow(result)
+        plt.text(100, 100, "Left lane radius of curvature: %(left_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
+        plt.text(100, 150, "Right lane radius of curvature: %(right_curvature).2f meters" % locals(), color=[1, 1, 1], fontsize=20)
+        plt.text(100, 200, "Vehicle is %(dist_from_center).2f meters of center" % locals(), color=[1, 1, 1], fontsize=20)
+        plt.show()
 
-def main():
-    args = defineFlags()
-    if (args.force_calibration or not os.path.isfile(CONST_CAMERA_CALIB_PICKLE_FILE_PATH)):
-        objpoints, imgpoints = getObjectAndImagePoints()
-        prepareCamera(objpoints, imgpoints)
-    # image = undistortImage(mpimg.imread('test_images/straight_lines1.jpg'))
-    image = mpimg.imread('test_images/test5.jpg')
+    return result
+
+def process_image(image, plot=False):
     grad_binary_x = absSobelThresh(image, orient="x", thresh_limits=(20, 100))
     grad_binary_y = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
     mag_binary = magSobelThresh(image, thresh_limits=(30, 100))
@@ -492,6 +494,22 @@ def main():
     left_lane_inds, right_lane_inds, left_fit, right_fit = slideWindowsFitPolynomial(warped_image)
     left_lane_inds, right_lane_inds, left_fit, right_fit = fitPolynomialAroundLinePositions(warped_image, left_lane_inds, right_lane_inds, left_fit, right_fit)
     left_curvature, right_curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_lane_inds, right_lane_inds)
-    drawLane(image, warped_image, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center)
+    return drawLane(image, warped_image, left_fit, right_fit, Minv, left_curvature, right_curvature, dist_from_center, plot)
+
+
+def main():
+    args = defineFlags()
+    if (args.force_calibration or not os.path.isfile(CONST_CAMERA_CALIB_PICKLE_FILE_PATH)):
+        objpoints, imgpoints = getObjectAndImagePoints()
+        prepareCamera(objpoints, imgpoints)
+    if (args.video):
+        output_video = 'project_video_output.mp4'
+        clip = VideoFileClip('project_video.mp4')
+        output_clip = clip.fl_image(process_image) #NOTE: this function expects color images!!
+        output_clip.write_videofile(output_video, audio=False)
+    else:
+        # image = undistortImage(mpimg.imread('test_images/straight_lines1.jpg'))
+        image = mpimg.imread('test_images/test5.jpg')
+        process_image(image, plot=True)
 
 main()
