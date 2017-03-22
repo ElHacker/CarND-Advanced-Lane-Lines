@@ -2,6 +2,10 @@ import numpy as np
 
 # Define a class to receive the characteristics of each line detection
 class Line():
+    curvature_threshold = 500
+    dropped_frame_count = 0
+    horizontal_distance_threshold = 800
+
     def __init__(self):
         # was the line detected in the last iteration?
         self.detected = False
@@ -25,3 +29,9 @@ class Line():
         self.ally = None
         # All good pixel indices
         self.lane_inds = None
+
+    def averageCurrentFitWithBestFit(self):
+        if (self.best_fit is None):
+            self.best_fit = self.current_fit
+        else:
+            self.best_fit = (self.current_fit + self.best_fit) / 2

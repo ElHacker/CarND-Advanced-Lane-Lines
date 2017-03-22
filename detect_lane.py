@@ -484,7 +484,7 @@ def drawLane(image, binary_warped, left_fit, right_fit, Minv, left_curvature, ri
 left_line = Line()
 right_line = Line()
 
-def process_image(image, plot=False):
+def processImage(image, plot=False):
     grad_binary_x = absSobelThresh(image, orient="x", thresh_limits=(20, 100))
     grad_binary_y = absSobelThresh(image, orient="y", thresh_limits=(20, 100))
     mag_binary = magSobelThresh(image, thresh_limits=(30, 100))
@@ -505,14 +505,45 @@ def process_image(image, plot=False):
     # visualizeImages(image, warped_image, 'Warped image', True)
     if (left_line.detected and right_line.detected):
         # Calculate from previously calculated lines
-        left_line.lane_inds, right_line.lane_inds, left_line.current_fit, right_line.current_fit = fitPolynomialAroundLinePositions(warped_image, left_line, right_line)
+        left_line_lane_inds, right_line_lane_inds, left_line_current_fit, right_line_current_fit = fitPolynomialAroundLinePositions(warped_image, left_line, right_line)
+        # Check if we should keep or drop the frame.
+        left_curvature, right_curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_line_lane_inds, right_line_lane_inds)
+        _, leftx, _, rightx, _ = getNonzeroPositions(warped_image, left_line_lane_inds, right_line_lane_inds)
+        if (abs(left_curvature - right_curvature) <= Line.curvature_threshold and
+                abs(leftx[-1] - rightx[-1]) <= Line.horizontal_distance_threshold):
+            left_line.curvature = left_curvature
+            left_line.lane_inds = left_line_lane_inds
+            left_line.current_fit = left_line_current_fit
+            left_line.allx = leftx
+            right_line.curvature = right_curvature
+            right_line.lane_inds = right_line_lane_inds
+            right_line.current_fit = right_line_current_fit
+            right_line.allx = rightx
+            left_line.averageCurrentFitWithBestFit()
+            right_line.averageCurrentFitWithBestFit()
+            Line.dropped_frame_count = 0
+        else:
+            Line.dropped_frame_count += 1
+            print("Dropped Frames: ", Line.dropped_frame_count)
+            print("Lane dists: ", abs(leftx[-1] - rightx[-1]))
+            print("Curvature diff : ", abs(left_curvature - right_curvature))
+            # Too Many frames have been dropped consecutively. Force window recalculation.
+            if (Line.dropped_frame_count >= 10):
+                left_line.detected = False
+                right_line.detected = False
+                Line.dropped_frame_count = 0
     else:
         # Calculate from scratch.
         left_line.lane_inds, right_line.lane_inds, left_line.current_fit, right_line.current_fit = slideWindowsFitPolynomial(warped_image)
-        left_line.detected = True
-        right_line.detected = True
-    left_line.curvature, right_line.curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_line.lane_inds, right_line.lane_inds)
-    return drawLane(image, warped_image, left_line.current_fit, right_line.current_fit, Minv, left_line.curvature, right_line.curvature, dist_from_center, plot)
+        _, left_line.allx, _, right_line.allx, _ = getNonzeroPositions(warped_image, left_line.lane_inds, right_line.lane_inds)
+        left_line.curvature, right_line.curvature, dist_from_center = calculateRadiusOfCurvatureAndCenterInWorldSpace(image, warped_image, left_line.lane_inds, right_line.lane_inds)
+        if (abs(left_line.curvature - right_line.curvature) <= Line.curvature_threshold and
+                abs(left_line.allx[-1] - right_line.allx[-1]) <= Line.horizontal_distance_threshold):
+            left_line.averageCurrentFitWithBestFit()
+            right_line.averageCurrentFitWithBestFit()
+            left_line.detected = True
+            right_line.detected = True
+    return drawLane(image, warped_image, left_line.best_fit, right_line.best_fit, Minv, left_line.curvature, right_line.curvature, dist_from_center, plot)
 
 
 def main():
@@ -523,11 +554,11 @@ def main():
     if (args.video):
         output_video = 'project_video_output.mp4'
         clip = VideoFileClip('project_video.mp4')
-        output_clip = clip.fl_image(process_image) #NOTE: this function expects color images!!
+        output_clip = clip.fl_image(processImage) #NOTE: this function expects color images!!
         output_clip.write_videofile(output_video, audio=False)
     else:
         # image = undistortImage(mpimg.imread('test_images/straight_lines1.jpg'))
         image = mpimg.imread('test_images/test5.jpg')
-        process_image(image, plot=True)
+        processImage(image, plot=True)
 
 main()
